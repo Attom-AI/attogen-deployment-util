@@ -24,8 +24,7 @@ on:
 jobs:
   approve:
     runs-on: ubuntu-latest
-    environment:
-      name: approval-gate
+    environment: approval-gate
     steps:
       - name: Approved
-        run: echo "Approved: deploying '${{ inputs.service }}' to '${{ inputs.target_environment }}'."
+        run: echo "Approved -- deploying '${{ inputs.service }}' to '${{ inputs.target_environment }}'."
