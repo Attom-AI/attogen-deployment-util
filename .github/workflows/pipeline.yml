@@ -3,14 +3,10 @@ name: Pipeline
 # The one workflow_dispatch entry point. Everything else is a reusable
 # workflow (on: workflow_call) invoked from here, never dispatched directly.
 #
-# `init` is a validation gate scoped to the pipeline service (see init.yml).
-# Adding publish/deploy later means a new reusable workflow file plus one
-# new job here -- each stage keeps its own runs-on, since deploy will need
-# a self-hosted runner (attogen's own deploy-k3s.yml requires one to reach
-# the cluster's private network), which init does not.
-#
-# `service`/`environment` are captured but unused until publish/deploy
-# exist and need them.
+# init validates; build-image, approve, and deploy are stubs (echo only for
+# now). Each stage keeps its own runs-on independent of the others -- that
+# matters concretely once deploy is real: it will need a self-hosted runner
+# to reach the cluster's private network, which the others do not.
 
 on:
   workflow_dispatch:
@@ -26,11 +22,11 @@ on:
         type: string
         default: "main"
       service:
-        description: "Which service to build+publish+deploy (unused until those stages exist; init always validates pipeline)"
+        description: "Which service to build/approve/deploy (init always validates pipeline regardless)"
         required: true
         type: string
       environment:
-        description: "Target deploy environment (unused until publish/deploy stages exist)"
+        description: "Target deploy environment"
         required: true
         type: string
         default: "k3s"
@@ -42,3 +38,23 @@ jobs:
       repo: ${{ inputs.repo }}
       branch: ${{ inputs.branch }}
     secrets: inherit
+
+  build-image:
+    needs: init
+    uses: ./.github/workflows/build-image.yml
+    with:
+      service: ${{ inputs.service }}
+
+  approve:
+    needs: build-image
+    uses: ./.github/workflows/approve.yml
+    with:
+      service: ${{ inputs.service }}
+      environment: ${{ inputs.environment }}
+
+  deploy:
+    needs: approve
+    uses: ./.github/workflows/deploy.yml
+    with:
+      service: ${{ inputs.service }}
+      environment: ${{ inputs.environment }}

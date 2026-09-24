@@ -1,0 +1,22 @@
+name: Build image
+
+# workflow_call only -- invoked by pipeline.yml after init passes.
+#
+# Stub. Real content (build + publish to a registry) is deliberately
+# deferred -- see the ad hoc workspace notes for the open questions (which
+# registry namespace, split build/publish or not) before designing this
+# for real.
+
+on:
+  workflow_call:
+    inputs:
+      service:
+        required: true
+        type: string
+
+jobs:
+  build-image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build image (stub)
+        run: echo "Would build the '${{ inputs.service }}' image here. Not yet implemented."

@@ -1,0 +1,26 @@
+name: Deploy
+
+# workflow_call only -- invoked by pipeline.yml after approval.
+#
+# Stub. The real rollout needs a self-hosted runner reaching the cluster's
+# private network -- attogen's own deploy-k3s.yml is the reference, and
+# whether this repo can even use that runner (org-scoped vs. repo-scoped)
+# is still an open question. Left for later; runs-on ubuntu-latest is a
+# placeholder, not a decision.
+
+on:
+  workflow_call:
+    inputs:
+      service:
+        required: true
+        type: string
+      environment:
+        required: true
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy (stub)
+        run: echo "Would deploy '${{ inputs.service }}' to '${{ inputs.environment }}' here. Not yet implemented."
