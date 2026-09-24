@@ -16,7 +16,6 @@ on:
 
 jobs:
   build-image:
-    name: Build
     runs-on: ubuntu-latest
     steps:
       - name: Build image (stub)

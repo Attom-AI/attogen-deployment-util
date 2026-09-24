@@ -24,7 +24,6 @@ permissions:
 
 jobs:
   init:
-    name: Fetch & test
     runs-on: ubuntu-latest
     steps:
       # ATTOGEN_READ_TOKEN is scoped to Attom-AI/attogen only, though repo

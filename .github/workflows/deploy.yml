@@ -20,7 +20,6 @@ on:
 
 jobs:
   deploy:
-    name: Roll out
     runs-on: ubuntu-latest
     steps:
       - name: Deploy (stub)
