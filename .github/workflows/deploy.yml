@@ -128,7 +128,24 @@ jobs:
       # gap, separate from the suite's proven zero-NETWORK-dependency
       # property (test_no_network.py) -- one file needs a package the
       # others don't, not external network/API access.
+      #
+      # -c points pytest at an empty, explicit ini file instead of letting it
+      # auto-discover attogen's own pytest.ini. --confcutdir only bounds
+      # conftest.py search, not ini-file discovery -- pytest still found and
+      # tried to load attogen's real pytest.ini (rootdir = attogen/), which
+      # carries pytest-django-specific options like DJANGO_SETTINGS_MODULE.
+      # Plain pytest (no pytest-django here, deliberately) treats that as an
+      # unknown config option and refuses to run at all -- exit code 4, a
+      # usage error, not a test failure. Measured: this is exactly what
+      # happened on the previous run, with 265 items collected but zero
+      # tests actually executed.
       - name: Run pipeline tests
         if: inputs.service == 'pipeline'
         working-directory: attogen
-        run: python -m pytest services/opportunity_pipeline/tests --confcutdir=services/opportunity_pipeline --ignore=services/opportunity_pipeline/tests/test_document_reader.py -v
+        run: |
+          echo "[pytest]" > /tmp/pipeline-pytest.ini
+          python -m pytest services/opportunity_pipeline/tests \
+            -c /tmp/pipeline-pytest.ini \
+            --confcutdir=services/opportunity_pipeline \
+            --ignore=services/opportunity_pipeline/tests/test_document_reader.py \
+            -v
