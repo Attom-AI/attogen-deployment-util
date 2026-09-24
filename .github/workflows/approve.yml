@@ -1,5 +1,16 @@
 name: Approve
 
+# workflow_call only -- invoked by pipeline.yml after the image is built.
+#
+# Real gate, not a stub: the `environment` below has a required-reviewer
+# protection rule, so this job pauses for manual approve/reject in the
+# GitHub UI before its steps run at all.
+#
+# The map form (`name:` key) is required here, not the bare-string
+# shorthand (`environment: approval-gate`) -- confirmed directly: the bare
+# form fails workflow parsing with a misleading "yaml syntax" error
+# specifically for a job inside a workflow_call-triggered file.
+
 on:
   workflow_call:
     inputs:
@@ -17,4 +28,4 @@ jobs:
       name: approval-gate
     steps:
       - name: Approved
-        run: echo "test"
+        run: echo "Approved: deploying '${{ inputs.service }}' to '${{ inputs.target_environment }}'."
