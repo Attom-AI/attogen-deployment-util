@@ -108,7 +108,18 @@ jobs:
       # hub.); `python -m pytest` (vs bare `pytest`) guarantees the working
       # directory is prepended to sys.path, so this resolves those imports
       # correctly regardless of which __init__.py files exist along the way.
+      #
+      # --confcutdir is load-bearing, not cosmetic. pytest walks UPWARD from
+      # the test path to the rootdir collecting every conftest.py it passes,
+      # which means running from the repo root picks up attogen's own root
+      # conftest.py -- entirely about Django/hub calibration seeding, and it
+      # does `from django.conf import settings` at import time. Django is
+      # deliberately not installed here (the pipeline service doesn't need
+      # it), so that import fails before a single test runs. Measured: this
+      # is exactly what happened on the first real run of this step.
+      # --confcutdir bounds the upward search so attogen/conftest.py is never
+      # reached.
       - name: Run pipeline tests
         if: inputs.service == 'pipeline'
         working-directory: attogen
-        run: python -m pytest services/opportunity_pipeline/tests -v
+        run: python -m pytest services/opportunity_pipeline/tests --confcutdir=services/opportunity_pipeline -v
