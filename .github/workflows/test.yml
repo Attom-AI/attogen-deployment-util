@@ -1,41 +1,32 @@
-name: Deploy
+name: Test
 
-# Stage 1 (inputs) + Stage 2 (fetch) + Stage 3 (build+test) only. Publish and
-# the actual k3s deploy are separate, later stages -- blocked on org-permission
-# questions -- so this workflow stops after validating what can be validated
-# today. `environment` exists now so the input shape doesn't need reworking
-# when deploy lands; nothing reads it yet.
+# workflow_call ONLY -- this is never dispatched directly by a human. It's
+# called by pipeline.yml, which holds the workflow_dispatch inputs. Splitting
+# it out this way means adding publish/deploy later is a new reusable
+# workflow file plus one new job in pipeline.yml, not a rewrite of one
+# monolithic file -- and it means this job's runs-on stays independent of
+# whatever a future deploy job needs (self-hosted, once that's built).
 #
-# Inputs are plain strings, not dropdowns -- a choice-driven matrix needs a
-# separate job converting the choice into a JSON list for strategy.matrix,
-# which is more plumbing than this stage is worth yet. One service per run.
+# `environment` isn't a parameter here on purpose: nothing in this workflow
+# reads it yet, so it stays only in pipeline.yml until a stage that actually
+# uses it (publish/deploy) exists.
 
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
       repo:
-        description: "Repository to fetch (owner/repo)"
         required: true
         type: string
-        default: "Attom-AI/attogen"
       branch:
-        description: "Branch to fetch"
         required: true
         type: string
-        default: "main"
       service:
-        description: "Which service to build+test: converter, pipeline, or minio"
         required: true
         type: string
-      environment:
-        description: "Target deploy environment (unused until publish/deploy stages exist)"
+    secrets:
+      ATTOGEN_READ_TOKEN:
         required: true
-        type: string
-        default: "k3s"
 
-# Least privilege: this job only ever needs to read its own workflow
-# definition. The target repo is fetched with a separate PAT
-# (ATTOGEN_READ_TOKEN) below, not this token -- it lives in another repo.
 permissions:
   contents: read
 

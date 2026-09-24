@@ -1,0 +1,50 @@
+name: Pipeline
+
+# The one workflow_dispatch entry point -- everything else is a reusable
+# workflow (on: workflow_call) this one calls, not dispatched directly by a
+# human. Replaces the earlier single file named "Deploy," which was
+# misleading once it only did fetch+build+test and nothing resembling a
+# deploy yet.
+#
+# Adding a stage later (publish, deploy) means a new reusable workflow file
+# plus one new job here calling it with `needs:` -- not a rewrite of this
+# file or test.yml. Each stage keeps its own runs-on independent of the
+# others, which matters concretely once deploy exists: attogen's own
+# deploy-k3s.yml requires a self-hosted runner (reaches the cluster's
+# private network), while test/publish need nothing special -- a constraint
+# a single flat job couldn't satisfy at all.
+#
+# Inputs are plain strings, not dropdowns -- a choice-driven matrix needs
+# more plumbing than this stage is worth yet. One service per run.
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: "Repository to fetch (owner/repo)"
+        required: true
+        type: string
+        default: "Attom-AI/attogen"
+      branch:
+        description: "Branch to fetch"
+        required: true
+        type: string
+        default: "main"
+      service:
+        description: "Which service to build+test: converter, pipeline, or minio"
+        required: true
+        type: string
+      environment:
+        description: "Target deploy environment (unused until publish/deploy stages exist)"
+        required: true
+        type: string
+        default: "k3s"
+
+jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+    with:
+      repo: ${{ inputs.repo }}
+      branch: ${{ inputs.branch }}
+      service: ${{ inputs.service }}
+    secrets: inherit
