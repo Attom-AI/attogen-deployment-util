@@ -6,16 +6,20 @@ name: Pipeline
 # misleading once it only did fetch+build+test and nothing resembling a
 # deploy yet.
 #
-# Adding a stage later (publish, deploy) means a new reusable workflow file
-# plus one new job here calling it with `needs:` -- not a rewrite of this
-# file or test.yml. Each stage keeps its own runs-on independent of the
-# others, which matters concretely once deploy exists: attogen's own
-# deploy-k3s.yml requires a self-hosted runner (reaches the cluster's
-# private network), while test/publish need nothing special -- a constraint
-# a single flat job couldn't satisfy at all.
+# `init` is a VALIDATION GATE, scoped to the pipeline service specifically --
+# see init.yml. Adding a stage later (publish, deploy) means a new reusable
+# workflow file plus one new job here calling it with `needs:` -- not a
+# rewrite of this file or init.yml. Each stage keeps its own runs-on
+# independent of the others, which matters concretely once deploy exists:
+# attogen's own deploy-k3s.yml requires a self-hosted runner (reaches the
+# cluster's private network), while init/publish need nothing special -- a
+# constraint a single flat job couldn't satisfy at all.
 #
-# Inputs are plain strings, not dropdowns -- a choice-driven matrix needs
-# more plumbing than this stage is worth yet. One service per run.
+# `service`/`environment` are captured here but not yet passed to anything --
+# init.yml doesn't take a `service` input at all (it only validates
+# pipeline). They're reserved for the publish/deploy jobs that will need
+# them; passing them through before a consumer exists would just be an
+# unused parameter one level down.
 
 on:
   workflow_dispatch:
@@ -31,7 +35,7 @@ on:
         type: string
         default: "main"
       service:
-        description: "Which service to build+test: converter, pipeline, or minio"
+        description: "Which service to build+publish+deploy (unused until those stages exist; init always validates pipeline)"
         required: true
         type: string
       environment:
@@ -41,10 +45,9 @@ on:
         default: "k3s"
 
 jobs:
-  test:
-    uses: ./.github/workflows/test.yml
+  init:
+    uses: ./.github/workflows/init.yml
     with:
       repo: ${{ inputs.repo }}
       branch: ${{ inputs.branch }}
-      service: ${{ inputs.service }}
     secrets: inherit

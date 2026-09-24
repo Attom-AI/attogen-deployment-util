@@ -1,0 +1,105 @@
+name: Init
+
+# workflow_call ONLY -- called by pipeline.yml, never dispatched directly.
+#
+# This is a VALIDATION GATE, not a general-purpose job: fetch the repo,
+# build/install what the pipeline service needs, run its real test suite.
+# If nothing fails, requirements are satisfied -- that's the whole contract.
+# Straight-line steps only; no per-service branching here (that's what made
+# the previous version noisy) -- this gate is scoped to the pipeline
+# service specifically.
+
+on:
+  workflow_call:
+    inputs:
+      repo:
+        required: true
+        type: string
+      branch:
+        required: true
+        type: string
+    secrets:
+      ATTOGEN_READ_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  init:
+    runs-on: ubuntu-latest
+    steps:
+      # ATTOGEN_READ_TOKEN is currently scoped to Attom-AI/attogen only.
+      # repo/branch are generic inputs (this tool is meant to work against
+      # other repos eventually), so a mismatch here is an expected v1 gap --
+      # fail fast with a readable message instead of letting checkout below
+      # surface GitHub's opaque "repository not found" for a bad token scope.
+      - name: Setup
+        if: inputs.repo != 'Attom-AI/attogen'
+        run: |
+          echo "::error::ATTOGEN_READ_TOKEN is only scoped to Attom-AI/attogen; got '${{ inputs.repo }}'. Generalizing this needs a broader-scoped token or per-repo secret lookup -- not yet supported."
+          exit 1
+
+      # Lands under ./attogen (not the workspace root) so it can't collide
+      # with whatever the orchestrator keeps at root later (e.g. deploy
+      # manifests once publish/deploy stages exist). persist-credentials:
+      # false so the PAT isn't left sitting in the runner's git config for
+      # later steps.
+      - name: Checkout ${{ inputs.repo }}@${{ inputs.branch }}
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.repo }}
+          ref: ${{ inputs.branch }}
+          token: ${{ secrets.ATTOGEN_READ_TOKEN }}
+          path: attogen
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"  # matches the service's own Dockerfile base image
+
+      - name: Install dependencies
+        run: |
+          pip install -r attogen/services/opportunity_pipeline/requirements.txt
+          pip install pytest
+
+      # Run from the attogen checkout root, not services/opportunity_pipeline/.
+      # The pipeline code imports repo-root-relative packages (sales., core.,
+      # hub.); `python -m pytest` (vs bare `pytest`) guarantees the working
+      # directory is prepended to sys.path, so this resolves those imports
+      # correctly regardless of which __init__.py files exist along the way.
+      #
+      # The pytest.ini write is folded into this step rather than its own --
+      # it's an implementation-detail workaround, not a separate stage.
+      # Written INSIDE the clone (never committed, discarded with the
+      # runner), not /tmp: pytest's discovery finds the NEAREST ini file
+      # walking up from the test path, so this one is picked up before
+      # attogen's real root pytest.ini is ever reached -- no explicit -c
+      # override needed. That root pytest.ini carries pytest-django-specific
+      # options (DJANGO_SETTINGS_MODULE); plain pytest (no pytest-django
+      # here, deliberately) treats an unrecognized option as a hard config
+      # error and refuses to run at all -- measured directly, not assumed.
+      #
+      # --confcutdir bounds a SEPARATE search: pytest also walks upward
+      # collecting every conftest.py it passes, which would otherwise reach
+      # attogen's own root conftest.py (imports django.conf at module load
+      # for hub calibration seeding) even with the local ini in place.
+      #
+      # test_document_reader.py is excluded, not the rest of the suite --
+      # its import chain (sales.services.master.document_staging ->
+      # sales.services.source_documents.storage) reaches
+      # `from django.core.files import File`, which the other 12 files
+      # don't. A footprint gap, not a network dependency (test_no_network.py
+      # already proves the suite needs no real network/model access).
+      - name: Run pipeline tests
+        working-directory: attogen
+        run: |
+          echo "[pytest]" > services/opportunity_pipeline/pytest.ini
+          python -m pytest services/opportunity_pipeline/tests \
+            --confcutdir=services/opportunity_pipeline \
+            --ignore=services/opportunity_pipeline/tests/test_document_reader.py \
+            -v
+
+      - name: Complete
+        run: echo "Init gate passed -- requirements satisfied."
