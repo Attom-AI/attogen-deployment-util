@@ -19,6 +19,7 @@ on:
 
 jobs:
   approve:
+    name: Await decision
     runs-on: ubuntu-latest
     steps:
       - name: Approval gate (stub)
