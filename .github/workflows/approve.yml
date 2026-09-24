@@ -2,14 +2,17 @@ name: Approve
 
 # workflow_call only -- invoked by pipeline.yml after the image is built.
 #
-# Real gate, not a stub: the `environment` below has a required-reviewer
-# protection rule, so this job pauses for manual approve/reject in the
-# GitHub UI before its steps run at all.
+# Real gate, not a stub: `environment: approval-gate` has a
+# required-reviewer protection rule, so this job pauses for manual
+# approve/reject in the GitHub UI before its steps run at all.
 #
-# The map form (`name:` key) is required here, not the bare-string
-# shorthand (`environment: approval-gate`) -- confirmed directly: the bare
-# form fails workflow parsing with a misleading "yaml syntax" error
-# specifically for a job inside a workflow_call-triggered file.
+# Note on a red herring: a `run:` value containing an unquoted colon+space
+# (e.g. "Approved: deploying...") breaks GitHub's workflow parser -- it's a
+# plain YAML scalar, and ": " is a mapping-key indicator YAML disallows
+# there. That surfaced as a misleading "yaml syntax" error pointing at the
+# run line, which looked at first like it was caused by the environment
+# key's bare-string form -- it wasn't; confirmed by testing each
+# independently.
 
 on:
   workflow_call:
