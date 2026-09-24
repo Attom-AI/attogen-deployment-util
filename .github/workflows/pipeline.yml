@@ -53,7 +53,7 @@ jobs:
     uses: ./.github/workflows/approve.yml
     with:
       service: ${{ inputs.service }}
-      environment: ${{ inputs.environment }}
+      target_environment: ${{ inputs.environment }}
 
   deploy:
     name: Deploy
