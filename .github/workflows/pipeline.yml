@@ -33,7 +33,7 @@ on:
 
 jobs:
   init:
-    name: Validate
+    name: Setup
     uses: ./.github/workflows/init.yml
     with:
       repo: ${{ inputs.repo }}
