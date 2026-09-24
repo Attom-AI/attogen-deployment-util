@@ -1,10 +1,14 @@
 name: Deploy
 
-# Scaffold only, step one. Captures the two inputs a deploy needs to know —
-# which repo, which branch — and does nothing else yet: no checkout, no
-# build, no deploy. The point right now is proving the picker itself works
-# end to end (dispatch -> runner -> inputs visible) before anything reads
-# or touches a target repo.
+# Stage 1 (inputs) + Stage 2 (fetch) + Stage 3 (build+test) only. Publish and
+# the actual k3s deploy are separate, later stages -- blocked on org-permission
+# questions -- so this workflow stops after validating what can be validated
+# today. `environment` exists now so the input shape doesn't need reworking
+# when deploy lands; nothing reads it yet.
+#
+# Inputs are plain strings, not dropdowns -- a choice-driven matrix needs a
+# separate job converting the choice into a JSON list for strategy.matrix,
+# which is more plumbing than this stage is worth yet. One service per run.
 
 on:
   workflow_dispatch:
@@ -19,12 +23,92 @@ on:
         required: true
         type: string
         default: "main"
+      service:
+        description: "Which service to build+test: converter, pipeline, or minio"
+        required: true
+        type: string
+      environment:
+        description: "Target deploy environment (unused until publish/deploy stages exist)"
+        required: true
+        type: string
+        default: "k3s"
+
+# Least privilege: this job only ever needs to read its own workflow
+# definition. The target repo is fetched with a separate PAT
+# (ATTOGEN_READ_TOKEN) below, not this token -- it lives in another repo.
+permissions:
+  contents: read
 
 jobs:
-  scaffold:
+  build-test:
     runs-on: ubuntu-latest
     steps:
-      - name: Show inputs
+      # ATTOGEN_READ_TOKEN is currently scoped to Attom-AI/attogen only.
+      # repo/branch are generic inputs (this tool is meant to work against
+      # other repos eventually), so a mismatch here is an expected v1 gap --
+      # fail fast with a readable message instead of letting checkout below
+      # surface GitHub's opaque "repository not found" for a bad token scope.
+      - name: Guard token scope
+        if: inputs.repo != 'Attom-AI/attogen'
         run: |
-          echo "repo:   ${{ inputs.repo }}"
-          echo "branch: ${{ inputs.branch }}"
+          echo "::error::ATTOGEN_READ_TOKEN is only scoped to Attom-AI/attogen; got '${{ inputs.repo }}'. Generalizing this needs a broader-scoped token or per-repo secret lookup -- not yet supported."
+          exit 1
+
+      # Fetch stage: cross-repo checkout of the target repo/branch. Lands
+      # under ./attogen (not the workspace root) so it can't collide with
+      # whatever the orchestrator keeps at root later (e.g. deploy manifests
+      # once publish/deploy stages exist). persist-credentials: false so the
+      # PAT isn't left sitting in the runner's git config for later steps.
+      - name: Checkout ${{ inputs.repo }}@${{ inputs.branch }}
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.repo }}
+          ref: ${{ inputs.branch }}
+          token: ${{ secrets.ATTOGEN_READ_TOKEN }}
+          path: attogen
+          persist-credentials: false
+
+      # --- converter: no test suite exists anywhere (confirmed, zero test
+      # files), and validating it by building its image is deliberately
+      # deferred -- not done here. This step exists only so a run against
+      # `converter` says so plainly instead of silently doing nothing.
+      - name: Converter (not yet validated)
+        if: inputs.service == 'converter'
+        run: |
+          echo "No validation implemented for the converter service yet."
+          echo "It has no test suite, and an image-build smoke test was deliberately deferred to the publish stage."
+
+      # --- minio: not built by attogen's CI at all -- it runs the stock
+      # minio/minio image (.config/k3s/platform/minio.yaml), no Dockerfile.
+      # Nothing to build or test here, ever, for this service -- different
+      # reason than converter's "deferred," so it gets its own message.
+      - name: MinIO (deploy-only, nothing to build or test)
+        if: inputs.service == 'minio'
+        run: |
+          echo "MinIO runs a stock public image (minio/minio) -- attogen has no Dockerfile for it."
+          echo "There is no build or test step for this service; it goes straight from manifest to deploy."
+
+      # --- pipeline: has a real pytest suite that needs zero external
+      # network access (test_no_network.py enforces this itself), so this
+      # runs as plain dependency-install + pytest -- no Docker involved.
+      - name: Set up Python
+        if: inputs.service == 'pipeline'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"  # matches the Dockerfile's python:3.13-slim base
+
+      - name: Install pipeline dependencies
+        if: inputs.service == 'pipeline'
+        run: |
+          pip install -r attogen/services/opportunity_pipeline/requirements.txt
+          pip install pytest
+
+      # Run from the attogen checkout root, not services/opportunity_pipeline/.
+      # The pipeline code imports repo-root-relative packages (sales., core.,
+      # hub.); `python -m pytest` (vs bare `pytest`) guarantees the working
+      # directory is prepended to sys.path, so this resolves those imports
+      # correctly regardless of which __init__.py files exist along the way.
+      - name: Run pipeline tests
+        if: inputs.service == 'pipeline'
+        working-directory: attogen
+        run: python -m pytest services/opportunity_pipeline/tests -v
