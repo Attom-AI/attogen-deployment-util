@@ -1,0 +1,30 @@
+name: Deploy
+
+# Scaffold only, step one. Captures the two inputs a deploy needs to know —
+# which repo, which branch — and does nothing else yet: no checkout, no
+# build, no deploy. The point right now is proving the picker itself works
+# end to end (dispatch -> runner -> inputs visible) before anything reads
+# or touches a target repo.
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: "Repository to fetch (owner/repo)"
+        required: true
+        type: string
+        default: "Attom-AI/attogen"
+      branch:
+        description: "Branch to fetch"
+        required: true
+        type: string
+        default: "QA"
+
+jobs:
+  scaffold:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Show inputs
+        run: |
+          echo "repo:   ${{ inputs.repo }}"
+          echo "branch: ${{ inputs.branch }}"
