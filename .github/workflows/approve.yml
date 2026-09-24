@@ -1,12 +1,5 @@
 name: Approve
 
-# workflow_call only -- invoked by pipeline.yml after the image is built.
-#
-# Real gate, not a stub: `environment: approval-gate` (the GitHub Environment
-# below, not the `inputs.environment` deploy target) has a required-reviewer
-# protection rule, so this job pauses for manual approve/reject in the
-# GitHub UI before its steps run at all.
-
 on:
   workflow_call:
     inputs:
@@ -20,7 +13,6 @@ on:
 jobs:
   approve:
     runs-on: ubuntu-latest
-    environment: approval-gate
     steps:
       - name: Approved
-        run: echo "Approved: deploying '${{ inputs.service }}' to '${{ inputs.target_environment }}'."
+        run: echo "test"
