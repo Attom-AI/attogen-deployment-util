@@ -18,7 +18,7 @@ on:
         description: "Branch to fetch"
         required: true
         type: string
-        default: "QA"
+        default: "main"
 
 jobs:
   scaffold:
