@@ -1,25 +1,16 @@
 name: Pipeline
 
-# The one workflow_dispatch entry point -- everything else is a reusable
-# workflow (on: workflow_call) this one calls, not dispatched directly by a
-# human. Replaces the earlier single file named "Deploy," which was
-# misleading once it only did fetch+build+test and nothing resembling a
-# deploy yet.
+# The one workflow_dispatch entry point. Everything else is a reusable
+# workflow (on: workflow_call) invoked from here, never dispatched directly.
 #
-# `init` is a VALIDATION GATE, scoped to the pipeline service specifically --
-# see init.yml. Adding a stage later (publish, deploy) means a new reusable
-# workflow file plus one new job here calling it with `needs:` -- not a
-# rewrite of this file or init.yml. Each stage keeps its own runs-on
-# independent of the others, which matters concretely once deploy exists:
-# attogen's own deploy-k3s.yml requires a self-hosted runner (reaches the
-# cluster's private network), while init/publish need nothing special -- a
-# constraint a single flat job couldn't satisfy at all.
+# `init` is a validation gate scoped to the pipeline service (see init.yml).
+# Adding publish/deploy later means a new reusable workflow file plus one
+# new job here -- each stage keeps its own runs-on, since deploy will need
+# a self-hosted runner (attogen's own deploy-k3s.yml requires one to reach
+# the cluster's private network), which init does not.
 #
-# `service`/`environment` are captured here but not yet passed to anything --
-# init.yml doesn't take a `service` input at all (it only validates
-# pipeline). They're reserved for the publish/deploy jobs that will need
-# them; passing them through before a consumer exists would just be an
-# unused parameter one level down.
+# `service`/`environment` are captured but unused until publish/deploy
+# exist and need them.
 
 on:
   workflow_dispatch:
