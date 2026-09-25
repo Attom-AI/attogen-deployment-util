@@ -2,11 +2,21 @@ name: Deploy
 
 # workflow_call only -- invoked by pipeline.yml after approval.
 #
-# Stub. The real rollout needs a self-hosted runner reaching the cluster's
-# private network -- attogen's own deploy-k3s.yml is the reference, and
-# whether this repo can even use that runner (org-scoped vs. repo-scoped)
-# is still an open question. Left for later; runs-on ubuntu-latest is a
-# placeholder, not a decision.
+# Rolls ONE service's image onto the k3s cluster, modeled on attogen's own
+# deploy-k3s.yml (QA branch) but scoped to a single Deployment: no
+# migration Job, no web/worker, no ConfigMap/Secret writes.
+#
+# Runner: the cluster API is private, so this runs on a self-hosted runner
+# on the cluster's network. attogen's runner (odcp-core-1-k3s) is
+# registered to attogen's repo alone and can't take jobs from here; this
+# expects a second runner instance on the same host, registered to this
+# repo with the label k3s-util, running as the same OS user so it shares
+# that host's kubeconfig. The kubeconfig never goes into GitHub.
+#
+# minio is verify-only: it's IaC-managed and a deploy never modifies it.
+#
+# Concurrency is per-repo: this group can't see attogen's deploy-k3s
+# group, so don't run both against the cluster at once.
 
 on:
   workflow_call:
@@ -17,10 +27,166 @@ on:
       environment:
         required: true
         type: string
+      image_ref:
+        description: "<tag>@<digest> from build-image; empty for minio"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash -euo pipefail {0}
+
+concurrency:
+  group: deploy-k3s-util
+  cancel-in-progress: false
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, k3s-util]
+    environment: k3s
+    env:
+      K3S_CONTEXT: ${{ vars.K3S_CONTEXT || 'odcp' }}
+      K3S_NAMESPACE: ${{ vars.K3S_NAMESPACE || 'forgen' }}
+      SERVICE: ${{ inputs.service }}
+      TARGET_ENV: ${{ inputs.environment }}
+      IMAGE_REF: ${{ inputs.image_ref }}
     steps:
-      - name: Deploy (stub)
-        run: echo "Would deploy '${{ inputs.service }}' to '${{ inputs.environment }}' here. Not yet implemented."
+      # Container name and port come from attogen's
+      # .config/k3s/deployment-{converter,pipeline}.yaml.
+      - name: Validate inputs
+        run: |
+          if [ "$TARGET_ENV" != "k3s" ]; then
+            echo "::error::Only environment 'k3s' is implemented; got '$TARGET_ENV'."
+            exit 1
+          fi
+          case "$SERVICE" in
+            converter) container=converter; port=8080 ;;
+            pipeline)  container=pipeline;  port=8099 ;;
+            minio)     container="";        port="" ;;
+            *)
+              echo "::error::Unknown service '$SERVICE' -- expected converter, pipeline, or minio."
+              exit 1 ;;
+          esac
+          if [ "$SERVICE" != "minio" ]; then
+            [[ "$IMAGE_REF" =~ ^ghcr\.io/attom-ai/forgen:util-[0-9a-f]{12}-${SERVICE}@sha256:[0-9a-f]{64}$ ]] || {
+              echo "::error::image_ref '$IMAGE_REF' is not a util-<sha12>-$SERVICE digest ref."
+              exit 1
+            }
+          fi
+          {
+            echo "DEPLOYMENT=forgen-$SERVICE"
+            echo "CONTAINER=$container"
+            echo "PORT=$port"
+          } >> "$GITHUB_ENV"
+
+      - name: Confirm cluster target
+        run: |
+          for tool in kubectl jq curl; do
+            command -v "$tool" >/dev/null || {
+              echo "::error::$tool is required on this runner."
+              exit 1
+            }
+          done
+          kubectl config get-contexts "$K3S_CONTEXT" >/dev/null 2>&1 || {
+            echo "::error::Context '$K3S_CONTEXT' is not configured on this runner."
+            exit 1
+          }
+          kubectl config use-context "$K3S_CONTEXT" >/dev/null
+          test "$(kubectl config current-context)" = "$K3S_CONTEXT"
+          kubectl get namespace "$K3S_NAMESPACE" >/dev/null
+
+      - name: MinIO readiness (verify-only)
+        if: inputs.service == 'minio'
+        run: |
+          kubectl -n "$K3S_NAMESPACE" get statefulset/minio >/dev/null
+          ready=$(kubectl -n "$K3S_NAMESPACE" get statefulset/minio -o jsonpath='{.status.readyReplicas}')
+          want=$(kubectl -n "$K3S_NAMESPACE" get statefulset/minio -o jsonpath='{.spec.replicas}')
+          echo "statefulset/minio ready ${ready:-0}/$want"
+          test "${ready:-0}" = "$want"
+
+      - name: Preflight
+        if: inputs.service != 'minio'
+        run: |
+          kubectl -n "$K3S_NAMESPACE" get "deployment/$DEPLOYMENT" >/dev/null || {
+            echo "::error::deployment/$DEPLOYMENT is not installed in $K3S_NAMESPACE; this workflow never creates it."
+            exit 1
+          }
+          kubectl -n "$K3S_NAMESPACE" get serviceaccount/default \
+            -o jsonpath='{.imagePullSecrets[*].name}' | grep -qw ghcr-pull || {
+              echo "::error::The default service account must reference the ghcr-pull secret."
+              exit 1
+            }
+          # Same check as attogen's deploy-k3s.yml: the converter reads this
+          # key non-optionally, so a missing one is a CrashLoopBackOff
+          # mid-rollout rather than a failure here.
+          if [ "$SERVICE" = "converter" ]; then
+            origins=$(kubectl -n "$K3S_NAMESPACE" get configmap/forgen-config \
+              -o jsonpath='{.data.CONVERSION_CALLBACK_ORIGINS}' 2>/dev/null || true)
+            test -n "$origins" || {
+              echo "::error::forgen-config.data.CONVERSION_CALLBACK_ORIGINS is required for the converter."
+              exit 1
+            }
+          fi
+          previous=$(kubectl -n "$K3S_NAMESPACE" get "deployment/$DEPLOYMENT" \
+            -o jsonpath="{.spec.template.spec.containers[?(@.name==\"$CONTAINER\")].image}")
+          test -n "$previous" || {
+            echo "::error::deployment/$DEPLOYMENT has no container named '$CONTAINER'."
+            exit 1
+          }
+          echo "PREVIOUS_IMAGE=$previous" >> "$GITHUB_ENV"
+          echo "Current image: $previous"
+          echo "Rolling to:    $IMAGE_REF"
+
+      - name: Roll out
+        if: inputs.service != 'minio'
+        run: |
+          # Set before the first mutation, so rollback runs only if we
+          # actually changed something.
+          # Already on this digest: set image would be a no-op, and a later
+          # rollout undo would then revert to an OLDER revision.
+          if [ "$PREVIOUS_IMAGE" = "$IMAGE_REF" ]; then
+            echo "deployment/$DEPLOYMENT already runs $IMAGE_REF; nothing to roll."
+            exit 0
+          fi
+          echo "ROLLED=true" >> "$GITHUB_ENV"
+          kubectl -n "$K3S_NAMESPACE" set image "deployment/$DEPLOYMENT" "$CONTAINER=$IMAGE_REF"
+          # Own key, not attogen's forgen.attom.ai/release (a source sha its
+          # tooling reads) -- that one is left as attogen last wrote it.
+          kubectl -n "$K3S_NAMESPACE" annotate "deployment/$DEPLOYMENT" \
+            "attogen-deployment-util/image=$IMAGE_REF" --overwrite
+          kubectl -n "$K3S_NAMESPACE" rollout status "deployment/$DEPLOYMENT" --timeout=10m
+
+      - name: Verify image and health
+        if: inputs.service != 'minio'
+        run: |
+          deployed=$(kubectl -n "$K3S_NAMESPACE" get "deployment/$DEPLOYMENT" \
+            -o jsonpath="{.spec.template.spec.containers[?(@.name==\"$CONTAINER\")].image}")
+          test "$deployed" = "$IMAGE_REF"
+          kubectl -n "$K3S_NAMESPACE" get pods -l "app.kubernetes.io/name=$DEPLOYMENT" -o wide
+
+          log="$RUNNER_TEMP/port-forward.log"
+          kubectl -n "$K3S_NAMESPACE" port-forward "deployment/$DEPLOYMENT" "18${PORT: -3}:$PORT" >"$log" 2>&1 &
+          pf=$!
+          trap 'kill "$pf" 2>/dev/null || true' EXIT
+          for _ in {1..30}; do
+            if curl --silent --fail --max-time 3 "http://127.0.0.1:18${PORT: -3}/healthz" >/dev/null; then
+              echo "HTTP 200: /healthz"
+              exit 0
+            fi
+            sleep 2
+          done
+          cat "$log" >&2 || true
+          echo "::error::/healthz never returned 200."
+          exit 1
+
+      # A bad PoC image must not leave the live service down.
+      - name: Roll back on failure
+        if: failure() && env.ROLLED == 'true'
+        run: |
+          kubectl -n "$K3S_NAMESPACE" logs "deployment/$DEPLOYMENT" --all-containers=true --tail=200 || true
+          kubectl -n "$K3S_NAMESPACE" rollout undo "deployment/$DEPLOYMENT"
+          kubectl -n "$K3S_NAMESPACE" rollout status "deployment/$DEPLOYMENT" --timeout=10m

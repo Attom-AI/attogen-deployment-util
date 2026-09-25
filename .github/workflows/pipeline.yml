@@ -4,11 +4,10 @@ name: Pipeline
 # workflow (on: workflow_call) invoked from here, never dispatched directly.
 #
 # init validates; build-image builds+pushes to ghcr.io/attom-ai/forgen;
-# approve is a real GitHub Environment gate (required reviewer). deploy is
-# still a stub (echo only). Each stage keeps its own runs-on independent of
-# the others -- that matters concretely once deploy is real: it will need a
-# self-hosted runner to reach the cluster's private network, which the
-# others do not.
+# approve is a real GitHub Environment gate (required reviewer); deploy
+# rolls the pushed digest onto k3s. Each stage keeps its own runs-on
+# independent of the others -- deploy runs on a self-hosted runner on the
+# cluster's private network (label k3s-util); the others don't need one.
 
 on:
   workflow_dispatch:
@@ -33,13 +32,10 @@ on:
         type: string
         default: "k3s"
 
-# packages: write is required for build-image's GHCR push -- reusable-workflow
-# token permissions are the intersection of caller and callee, so this has to
-# be declared here, not just in build-image.yml, or the repo/org default
-# (typically read-only) is all that ever reaches that job.
+# contents: read only -- build-image pushes with the GHCR_TOKEN PAT, not
+# GITHUB_TOKEN, so packages: write is no longer needed here.
 permissions:
   contents: read
-  packages: write
 
 jobs:
   init:
@@ -70,8 +66,9 @@ jobs:
 
   deploy:
     name: Deploy
-    needs: approve
+    needs: [build-image, approve]
     uses: ./.github/workflows/deploy.yml
     with:
       service: ${{ inputs.service }}
       environment: ${{ inputs.environment }}
+      image_ref: ${{ needs.build-image.outputs.image_ref }}

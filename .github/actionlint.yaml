@@ -1,0 +1,5 @@
+# Custom label of the self-hosted runner deploy.yml targets (a second
+# runner instance on the k3s host, registered to this repo).
+self-hosted-runner:
+  labels:
+    - k3s-util
