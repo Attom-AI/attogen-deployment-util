@@ -1,7 +1,19 @@
 # attogen-deployment-util
 
-Standalone deployment orchestrator: pick a target repo, branch, and
-environment; deploys without modifying the target repo.
+A standalone deployment orchestrator for attogen's services. Dispatched
+with a target repo, branch, service, and environment, it fetches that
+source, runs its test suite, builds and pushes a container image, pauses
+for manual approval, and deploys — one linear pipeline, each stage a
+separate reusable workflow.
+
+It lives in its own repo on purpose: it only ever reads the target repo,
+through a narrowly scoped token, and never writes back to it. Nothing here
+touches attogen's own history, branches, or CI.
+
+Scope today is attogen's `converter`, `pipeline`, and `minio` services,
+deployed to k3s. Inputs are plain strings rather than a fixed enum, so
+other repos, services, or environments aren't structurally ruled out — but
+this is the only combination actually built and exercised so far.
 
 ## Pipeline
 
