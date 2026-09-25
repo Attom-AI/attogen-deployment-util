@@ -8,8 +8,8 @@ environment; deploys without modifying the target repo.
 ```mermaid
 flowchart LR
     A["Pipeline<br/>workflow_dispatch"] --> B["init<br/>validate"]
-    B --> C["build-image<br/>stub"]
-    C --> D["approve<br/>stub"]
+    B --> C["build-image<br/>build + push"]
+    C --> D["approve<br/>manual gate"]
     D --> E["deploy<br/>stub"]
 ```
 
@@ -17,8 +17,8 @@ flowchart LR
 |---|---|---|
 | Pipeline | `pipeline.yml` | Orchestrator — the only `workflow_dispatch` entry point |
 | init | `init.yml` | Real — fetches the target repo, runs its test suite |
-| build-image | `build-image.yml` | Stub — echoes only |
-| approve | `approve.yml` | Stub — echoes only; real version pauses on a GitHub Environment's required reviewers |
+| build-image | `build-image.yml` | Real — builds and pushes to `ghcr.io/attom-ai/forgen`; push is blocked until `ezekiel-atl` is granted GHCR access on that package |
+| approve | `approve.yml` | Real — pauses on a GitHub Environment's required reviewers |
 | deploy | `deploy.yml` | Stub — echoes only; will need a self-hosted runner reaching the cluster |
 
 Each stage after `Pipeline` is a reusable workflow (`on: workflow_call`) —
