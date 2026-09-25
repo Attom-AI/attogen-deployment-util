@@ -4,9 +4,9 @@ name: Build image
 #
 # Pushes to ghcr.io/attom-ai/forgen -- attogen's own package, not a
 # personal-namespace fallback. This requires an Attom-AI admin to grant
-# this repo ("Manage Actions access" on the forgen package, or a direct
-# package-level grant to ezekiel-atl) before the push step below can
-# succeed -- an external, out-of-band dependency, same as
+# this repo access ("Manage Actions access" on the forgen package, or a
+# direct package-level grant to this repo's owner) before the push step
+# below can succeed -- an external, out-of-band dependency, same as
 # ATTOGEN_READ_TOKEN needing to be set by hand before init.yml worked
 # end-to-end. Checkout and image build can be verified before that grant
 # exists; only the final push is blocked until then.
