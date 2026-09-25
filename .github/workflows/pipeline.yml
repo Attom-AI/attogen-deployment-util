@@ -3,10 +3,12 @@ name: Pipeline
 # The one workflow_dispatch entry point. Everything else is a reusable
 # workflow (on: workflow_call) invoked from here, never dispatched directly.
 #
-# init validates; build-image, approve, and deploy are stubs (echo only for
-# now). Each stage keeps its own runs-on independent of the others -- that
-# matters concretely once deploy is real: it will need a self-hosted runner
-# to reach the cluster's private network, which the others do not.
+# init validates; build-image builds+pushes to ghcr.io/attom-ai/forgen;
+# approve is a real GitHub Environment gate (required reviewer). deploy is
+# still a stub (echo only). Each stage keeps its own runs-on independent of
+# the others -- that matters concretely once deploy is real: it will need a
+# self-hosted runner to reach the cluster's private network, which the
+# others do not.
 
 on:
   workflow_dispatch:
@@ -31,6 +33,14 @@ on:
         type: string
         default: "k3s"
 
+# packages: write is required for build-image's GHCR push -- reusable-workflow
+# token permissions are the intersection of caller and callee, so this has to
+# be declared here, not just in build-image.yml, or the repo/org default
+# (typically read-only) is all that ever reaches that job.
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   init:
     name: Setup
@@ -45,7 +55,10 @@ jobs:
     needs: init
     uses: ./.github/workflows/build-image.yml
     with:
+      repo: ${{ inputs.repo }}
+      branch: ${{ inputs.branch }}
       service: ${{ inputs.service }}
+    secrets: inherit
 
   approve:
     name: Manual Approval
