@@ -72,7 +72,7 @@ jobs:
               exit 1 ;;
           esac
           if [ "$SERVICE" != "minio" ]; then
-            [[ "$IMAGE_REF" =~ ^ghcr\.io/attom-ai/forgen:util-[0-9a-f]{12}-${SERVICE}@sha256:[0-9a-f]{64}$ ]] || {
+            [[ "$IMAGE_REF" =~ ^ghcr\.io/attom-ai/attogen/forgen:util-[0-9a-f]{12}-${SERVICE}@sha256:[0-9a-f]{64}$ ]] || {
               echo "::error::image_ref '$IMAGE_REF' is not a util-<sha12>-$SERVICE digest ref."
               exit 1
             }

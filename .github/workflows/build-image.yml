@@ -2,12 +2,16 @@ name: Build image
 
 # workflow_call only -- invoked by pipeline.yml after init passes.
 #
-# Pushes to ghcr.io/attom-ai/forgen -- attogen's own package, not a
+# Pushes to ghcr.io/attom-ai/attogen/forgen -- attogen's own package, not a
 # personal-namespace fallback -- authenticated with GHCR_TOKEN, a classic
 # PAT (write:packages) belonging to someone with write on that package.
 # GITHUB_TOKEN can't do it: this repo lives outside the Attom-AI org, and
 # the push was refused with "The requested installation does not exist."
 # Like ATTOGEN_READ_TOKEN, GHCR_TOKEN is set by hand, out of band.
+#
+# The path follows attogen: it moved from ghcr.io/attom-ai/forgen to
+# ghcr.io/attom-ai/attogen/forgen in attogen PR #567 (2026-09-27), and the
+# live cluster's Deployments pull from the new path.
 #
 # Tags are util-<sha12>-<service>, never attogen's k3s-<sha12>-<service>:
 # building the same commit under attogen's scheme would overwrite
@@ -80,7 +84,7 @@ jobs:
               exit 1
               ;;
           esac
-          echo "tag=ghcr.io/attom-ai/forgen:util-$(git rev-parse --short=12 HEAD)-${{ inputs.service }}" >> "$GITHUB_OUTPUT"
+          echo "tag=ghcr.io/attom-ai/attogen/forgen:util-$(git rev-parse --short=12 HEAD)-${{ inputs.service }}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         if: inputs.service != 'minio'

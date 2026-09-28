@@ -3,7 +3,7 @@ name: Pipeline
 # The one workflow_dispatch entry point. Everything else is a reusable
 # workflow (on: workflow_call) invoked from here, never dispatched directly.
 #
-# init validates; build-image builds+pushes to ghcr.io/attom-ai/forgen;
+# init validates; build-image builds+pushes to ghcr.io/attom-ai/attogen/forgen;
 # approve is a real GitHub Environment gate (required reviewer); deploy
 # rolls the pushed digest onto k3s. Each stage keeps its own runs-on
 # independent of the others -- deploy runs on a self-hosted runner on the

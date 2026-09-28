@@ -29,7 +29,7 @@ flowchart LR
 |---|---|---|
 | Pipeline | `pipeline.yml` | Orchestrator — the only `workflow_dispatch` entry point |
 | init | `init.yml` | Fetches the target repo and runs its test suite |
-| build-image | `build-image.yml` | Builds and pushes `ghcr.io/attom-ai/forgen:util-<sha12>-<service>` (never attogen's `k3s-…` tags) and outputs its digest ref; `minio` builds nothing |
+| build-image | `build-image.yml` | Builds and pushes `ghcr.io/attom-ai/attogen/forgen:util-<sha12>-<service>` (never attogen's `k3s-…` tags) and outputs its digest ref; `minio` builds nothing |
 | approve | `approve.yml` | Pauses on a GitHub Environment's required reviewers |
 | deploy | `deploy.yml` | On a self-hosted runner inside the cluster network: `kubectl set image` on `forgen-<service>` to the built digest, waits for the rollout, checks `/healthz`, and rolls back on failure. Never creates resources or touches ConfigMaps/Secrets; `minio` is verify-only (StatefulSet ready) |
 
@@ -58,7 +58,7 @@ One-time, out of band — none of this is done by the workflows:
 | What | Why |
 |---|---|
 | `ATTOGEN_READ_TOKEN` secret | Fine-grained PAT, contents read-only on the target repo; used by `init` and `build-image` checkout |
-| `GHCR_TOKEN` secret | Classic PAT with `write:packages` from an account with write on the `attom-ai/forgen` package (SSO-authorized if the org requires it). `GITHUB_TOKEN` can't push there from a repo outside the org |
+| `GHCR_TOKEN` secret | Classic PAT with `write:packages` from an account with write on the `attom-ai/attogen/forgen` package (SSO-authorized if the org requires it). `GITHUB_TOKEN` can't push there from a repo outside the org |
 | `approval-gate` environment | Required reviewers; `approve.yml` pauses on it |
 | `k3s` environment | Optional vars `K3S_CONTEXT` (default `odcp`) and `K3S_NAMESPACE` (default `forgen`) |
 | Self-hosted runner, label `k3s-util` | The cluster API is private. A runner registered to another repo can't take this repo's jobs, so register a second runner instance on the cluster host for this repo, as the same OS user as that host's kubeconfig |
