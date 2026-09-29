@@ -41,7 +41,7 @@ none of them are dispatched directly.
 | Input | Type | Required | Default | Example (attogen) |
 |---|---|---|---|---|
 | `repo` | string | yes | `Attom-AI/attogen` | `Attom-AI/attogen` |
-| `branch` | string | yes | `main` | `QA` |
+| `branch` | string | yes | `dev` | `dev` |
 | `service` | string | yes | — | `converter`, `pipeline`, or `minio` |
 | `environment` | string | yes | `k3s` | `k3s` |
 
@@ -81,5 +81,5 @@ can't see each other.
 
 ```bash
 gh workflow run Pipeline -R <owner>/attogen-deployment-util \
-  -f repo=Attom-AI/attogen -f branch=QA -f service=pipeline -f environment=k3s
+  -f repo=Attom-AI/attogen -f branch=dev -f service=pipeline -f environment=k3s
 ```

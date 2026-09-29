@@ -21,7 +21,7 @@ on:
         description: "Branch to fetch"
         required: true
         type: string
-        default: "main"
+        default: "dev"
       service:
         description: "Which service to build/approve/deploy (init always validates pipeline regardless)"
         required: true

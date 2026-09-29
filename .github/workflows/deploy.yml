@@ -3,7 +3,7 @@ name: Deploy
 # workflow_call only -- invoked by pipeline.yml after approval.
 #
 # Rolls ONE service's image onto the k3s cluster, modeled on attogen's own
-# deploy-k3s.yml (QA branch) but scoped to a single Deployment: no
+# deploy-k3s.yml but scoped to a single Deployment: no
 # migration Job, no web/worker, no ConfigMap/Secret writes.
 #
 # Runner: the cluster API is private, so this runs on a self-hosted runner
